@@ -81,3 +81,106 @@ plt.grid(True)
 plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 plt.tight_layout()
 plt.show()
+
+
+# ==========================================
+# 6. ASIGNAR ÁREA DE SERVICIO A CADA HELIPUERTO
+# ==========================================
+
+# Crear un diccionario donde cada helipuerto tiene una lista de municipios asignados
+areas_servicio = {h: [] for h in helipuertos.keys()}
+
+for _, muni in df.iterrows():
+    # Encontramos el helipuerto más cercano
+    mejor_cluster = None
+    mejor_dist = float("inf")
+
+    for cluster_name, h in helipuertos.items():
+        d = math.hypot(
+            muni["CoordenadaX"] - h["CoordenadaX"],
+            muni["CoordenadaY"] - h["CoordenadaY"]
+        )
+        if d < mejor_dist:
+            mejor_dist = d
+            mejor_cluster = cluster_name
+
+    # Asignamos el municipio a su área de servicio
+    areas_servicio[mejor_cluster].append(muni["Municipio"])
+
+# Opcional: mostrar conteos
+for cluster_name, lista in areas_servicio.items():
+    print(f"Área de servicio de {helipuertos[cluster_name]['Municipio']} ({cluster_name}): {len(lista)} municipios")
+
+
+# ==========================================
+# 7. VISUALIZACIÓN: ÁREA DE SERVICIO EN EL GRÁFICO
+# ==========================================
+
+plt.figure(figsize=(16, 12))
+
+# 1) Asignar cada municipio a su helipuerto más cercano
+asignaciones = []
+for _, muni in df.iterrows():
+    dmin = float("inf")
+    centro_asignado = None
+    
+    for cluster_name, h in helipuertos.items():
+        d = math.hypot(
+            muni["CoordenadaX"] - h["CoordenadaX"],
+            muni["CoordenadaY"] - h["CoordenadaY"]
+        )
+        if d < dmin:
+            dmin = d
+            centro_asignado = cluster_name
+    
+    asignaciones.append(centro_asignado)
+
+df["area_servicio"] = asignaciones
+
+# 2) Colores para cada área
+import matplotlib.colors as mcolors
+colores = list(mcolors.TABLEAU_COLORS.values())
+while len(colores) < len(helipuertos):
+    colores += colores  # duplicar si hiciera falta
+
+color_map = {name: colores[i] for i, name in enumerate(helipuertos.keys())}
+
+# 3) Dibujar municipios coloreados por área
+for area, group in df.groupby("area_servicio"):
+    plt.scatter(
+        group["CoordenadaX"],
+        group["CoordenadaY"],
+        s=25,
+        alpha=0.65,
+        color=color_map[area],
+        label=f"Área {area}"
+    )
+
+# 4) Dibujar helipuertos encima
+for cluster_name, muni in helipuertos.items():
+    plt.scatter(
+        muni["CoordenadaX"],
+        muni["CoordenadaY"],
+        s=300,
+        marker="*",
+        color="black",
+        edgecolor="yellow",
+        linewidth=1.7,
+        zorder=10
+    )
+    plt.text(
+        muni["CoordenadaX"] + 500,
+        muni["CoordenadaY"] + 500,
+        muni["Municipio"] + " (Helipuerto)",
+        fontsize=10,
+        fontweight="bold",
+        zorder=11
+    )
+
+plt.title("Áreas de servicio asignadas por distancia al helipuerto (Voronoi discreto)")
+plt.xlabel("Coordenada X")
+plt.ylabel("Coordenada Y")
+plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+plt.grid(True)
+plt.tight_layout()
+plt.show()
