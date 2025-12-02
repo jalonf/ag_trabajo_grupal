@@ -231,3 +231,27 @@ plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 plt.grid(True)
 plt.tight_layout()
 plt.show()
+
+# ==========================================
+# 9. MÉTRICAS DE COSTE DEL MODELO P-CENTER
+# ==========================================
+
+# Distancia máxima (criterio típico del modelo p-center)
+dist_max = df["distancia_helipuerto"].max()
+
+# Distancia media y total
+dist_media = df["distancia_helipuerto"].mean()
+dist_total = df["distancia_helipuerto"].sum()
+
+# Distancia media ponderada por población
+dist_media_pond = (
+    (df["Población"] * df["distancia_helipuerto"]).sum()
+    / df["Población"].sum()
+)
+
+print("\nMÉTRICAS DEL MODELO P-CENTER")
+print(f"Distancia máxima al helipuerto: {dist_max:.2f}")
+print(f"Distancia media al helipuerto: {dist_media:.2f}")
+print(f"Distancia total (suma de distancias): {dist_total:.2f}")
+print(f"Distancia media ponderada por población: {dist_media_pond:.2f}")
+
