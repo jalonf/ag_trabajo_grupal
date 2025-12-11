@@ -1,54 +1,47 @@
+
+"@author Jorge Alonso Fernández, Alberto Morán Reina"
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
 import matplotlib.colors as mcolors
 
-# ================================
-# 1. Cargar CSV y limpiar BOM (caracter invisible csv)
-# ================================
-df = pd.read_csv("municipios.csv", sep=";", encoding="utf-8-sig")
-df.columns = df.columns.str.replace("\ufeff", "", regex=False)
 
-# ================================
-# 2. Crear clusters (provincias + Bierzo)
-# ================================
+# Cargo los datos del csv y les quito el caracter "BOM".
+data = pd.read_csv("municipios.csv", sep=";", encoding="utf-8-sig")
+data.columns = data.columns.str.replace("\ufeff", "", regex=False)
+
+
+# Crear clusters (provincias + Bierzo)
 
 """
-Se crea una nueva columna 'cluster' en el DataFrame df.
+Se crea una nueva columna 'cluster' en el DataFrame data.
 El contenido de 'cluster' para cada municipio es:
-- Si el municipio está en la provincia de LEÓN y en la comarca de EL BIERZO,
+1. Si el municipio está en la provincia de LEÓN y en la comarca de EL BIERZO,
     entonces el valor de 'cluster' será "BIERZO".
-- En caso de que no cumpla la condición previa, el valor 
+2. En caso de que no cumpla la condición previa, el valor 
     de 'cluster' será el nombre de la provincia del municipio.    
 """
-df["cluster"] = df.apply(
-    lambda row: "BIERZO"
+data["cluster"] = data.apply( lambda row: "BIERZO"
     if row["Provincia"] == "LEÓN" and row["Comarca"] == "COMARCA DE EL BIERZO"
     else row["Provincia"],
     axis=1
 )
 
-# ================================
-# 3. Distancia euclídea
-# ================================
 
-# Calcula la distancia euclídea entre dos puntos (ciudades) a y b,
-# usando sus coordenadas 'CoordenadaX' y 'CoordenadaY'.
-# math.hypot(dx, dy) = sqrt(dx**2 + dy**2)
+# Calcula la distancia euclídea entre dos puntos (ciudades) a y b, usando sus coordenadas 'CoordenadaX' y 'CoordenadaY'.
 def dist(a, b):
     return math.hypot(a["CoordenadaX"] - b["CoordenadaX"], a["CoordenadaY"] - b["CoordenadaY"])
 
-# ================================
-# 4. ALGORITMO P-CENTER POR PROVINCIA
-# ================================
+# ---------- ALGORITMO P-CENTER POR PROVINCIA ----------
 
-# Defino la lista de helipuertos.
+# Defino la lista de helipuertos (de momento vacía).
 helipuertos = {}
 
-for cluster_name, subdf in df.groupby("cluster"):
+for cluster_name, subdf in data.groupby("cluster"):
 
     """
-    Convertimos las filas del cluster en una lista de diccionarios (municipios)
+    Convertimos las filas del cluster en una lista de diccionarios (municipios).
     Ejemplo de un municipio dentro del diccionario:
     municipio = {
     "Municipio": "ANDAVÍAS",                      
@@ -61,32 +54,31 @@ for cluster_name, subdf in df.groupby("cluster"):
     cluster: "ZAMORA"       # Columna añadida en el paso 2
     }                          
     """
+    # Un diccionario funciona como un hashmap (por ejemplo), es decir, es una estructura de datos clave-valor.
     municipios = list(subdf.to_dict("records"))
 
     # Cogemos como candidatos solo los municipios con al menos 300 habitantes.
     candidatos = [m for m in municipios if m["Población"] >= 300]
     # Si ningún municipio llega a 300 habitantes (no debería ocurrir), usamos todos los municipios del cluster
-    if not candidatos:
+    if len(candidatos) < 1:     # Se comprueba que la lista de candidatos no este vacía por si acaso .
         candidatos = municipios
 
-    best_center = None          # Mejor municipio encontrado como centro
-    best_max_dist = float("inf")  # Mejor (mínima) distancia máxima encontrada
+    mejor_centro = None          # Mejor municipio encontrado como centro, lo pongo como None porque aún no se ha ejecutado la búsqueda.
+    mejor_distancia_maxima = float("inf")  # Mejor (mínima) distancia máxima encontrada
 
     # Para cada candidato calculamos la peor distancia a cualquier municipio del cluster.
     for m_i in candidatos:
-        max_d = max(dist(m_i, m_j) for m_j in municipios)
+        dist_max = max(dist(m_i, m_j) for m_j in municipios)
         # Nos quedamos con el candidato cuya peor distancia sea la menor posible.
-        if max_d < best_max_dist:
-            best_max_dist = max_d
-            best_center = m_i
+        if dist_max < mejor_distancia_maxima:
+            mejor_distancia_maxima = dist_max
+            mejor_centro = m_i
 
     # Guardamos, para cada cluster, el municipio elegido como centro del helipuerto.
-    helipuertos[cluster_name] = best_center
+    helipuertos[cluster_name] = mejor_centro
 
 
-# ==========================================
-# 5. ASIGNAR ÁREA DE SERVICIO (VORONOI DISCRETO)
-# ==========================================
+# 5. ASIGNAR ÁREA DE SERVICIO.
 
 # Diccionario donde, para cada helipuerto (clave = nombre del cluster),
 # guardaremos la lista de municipios que quedan en su área de servicio.
@@ -98,24 +90,21 @@ asignaciones = []
 distancias = []
 
 # Recorremos todos los municipios del DataFrame
-for _, muni in df.iterrows():
-    # Inicializamos la mejor distancia encontrada como infinito
-    # y sin helipuerto asignado aún.
+for _, municipio in data.iterrows():
+    # Inicializamos la mejor distancia encontrada como infinito y sin helipuerto asignado aún.
     dmin = float("inf")
     centro_asignado = None
 
     # Comparamos el municipio con cada helipuerto disponible
     for cluster_name, h in helipuertos.items():
         # Calculamos la distancia euclídea entre el municipio y el helipuerto
-        d = math.hypot(
-            muni["CoordenadaX"] - h["CoordenadaX"],
-            muni["CoordenadaY"] - h["CoordenadaY"]
+        distancia_euclidea = math.hypot(municipio["CoordenadaX"] - h["CoordenadaX"], municipio["CoordenadaY"] - h["CoordenadaY"]
         )
 
         # Si esta distancia es menor que la mejor encontrada hasta ahora,
         # actualizamos la distancia mínima y el helipuerto asignado.
-        if d < dmin:
-            dmin = d
+        if distancia_euclidea < dmin:
+            dmin = distancia_euclidea
             centro_asignado = cluster_name
 
     # Al terminar el bucle de helipuertos, ya sabemos cuál es el más cercano:
@@ -125,30 +114,22 @@ for _, muni in df.iterrows():
 
     # Añadimos el municipio actual a la lista de municipios atendidos
     # por el helipuerto más cercano (su área de servicio).
-    areas_servicio[centro_asignado].append(muni["Municipio"])
+    areas_servicio[centro_asignado].append(municipio["Municipio"])
 
 # Añadimos al DataFrame la columna con el área de servicio asignada
-df["area_servicio"] = asignaciones
+data["area_servicio"] = asignaciones
 
 # Añadimos la distancia desde cada municipio a su helipuerto
-df["distancia_helipuerto"] = distancias
+data["distancia_helipuerto"] = distancias
 
 # Añadimos el nombre del municipio que actúa como helipuerto asignado
 # (buscándolo en el diccionario 'helipuertos' a partir del área de servicio).
-df["helipuerto_municipio"] = df["area_servicio"].apply(
+data["helipuerto_municipio"] = data["area_servicio"].apply(
     lambda cl: helipuertos[cl]["Municipio"]
 )
 
-# ==========================================
-# 6. MOSTRAR ÁREAS DE SERVICIO EN CONSOLA
-# ==========================================
-for cluster_name, lista in areas_servicio.items():
-    print(f"Área de servicio de {helipuertos[cluster_name]['Municipio']} ({cluster_name}): {len(lista)} municipios")
-
-# ==========================================
-# 7. CSV LIMPIO
-# ==========================================
-df_export = df[
+# CSV para exportar incluyendo las areas de servicio asignadas y las distancias al helipuerto más cercano.
+data_export = data[
     [
         "Municipio",
         "Provincia",
@@ -163,12 +144,11 @@ df_export = df[
     ]
 ]
 
-df_export.to_csv("helipuertos_con_asignacion.csv", index=False)
+data_export.to_csv("helipuertos_con_asignacion.csv", index=False)
 print("CSV creado: helipuertos_con_asignacion.csv")
 
-# ==========================================
-# 8. GRÁFICA FINAL (NOMBRES + ÁREAS)
-# ==========================================
+# GRÁFICA FINAL (NOMBRES + ÁREAS)
+# Utilizo matplotlib para dibujar la gráfica.
 
 plt.figure(figsize=(18, 13))
 
@@ -180,7 +160,7 @@ while len(colores) < len(helipuertos):
 color_map = {name: colores[i] for i, name in enumerate(helipuertos.keys())}
 
 # Dibujar municipios según área
-for area, group in df.groupby("area_servicio"):
+for area, group in data.groupby("area_servicio"):
     plt.scatter(
         group["CoordenadaX"],
         group["CoordenadaY"],
@@ -190,7 +170,7 @@ for area, group in df.groupby("area_servicio"):
         label=f"Área: {area}"
     )
 
-# ===== ETIQUETAS SIN SOLAPAMIENTO =====
+
 def offset_label(x, y, i):
     offsets = [
         (1800, 1800), (-2000, 1800),
@@ -214,15 +194,7 @@ for i, (cluster_name, muni) in enumerate(helipuertos.items()):
 
     ox, oy = offset_label(muni["CoordenadaX"], muni["CoordenadaY"], i)
 
-    plt.text(
-        ox,
-        oy,
-        f"{muni['Municipio']} ({cluster_name})",
-        fontsize=11,
-        fontweight="bold",
-        color="black",
-        zorder=11
-    )
+    plt.text(ox, oy, f"{muni['Municipio']} ({cluster_name})", fontsize=11, fontweight="bold", color="black", zorder=11)
 
 plt.title("Áreas de servicio por helipuerto (Modelo P-Center)\nCon nombres de helipuertos y zonas coloreadas", fontsize=15)
 plt.xlabel("Coordenada X")
@@ -232,26 +204,24 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-# ==========================================
 # 9. MÉTRICAS DE COSTE DEL MODELO P-CENTER
-# ==========================================
 
 # Distancia máxima (criterio típico del modelo p-center)
-dist_max = df["distancia_helipuerto"].max()
+dist_max = data["distancia_helipuerto"].max()
 
 # Distancia media y total
-dist_media = df["distancia_helipuerto"].mean()
-dist_total = df["distancia_helipuerto"].sum()
+dist_media = data["distancia_helipuerto"].mean()
+dist_total = data["distancia_helipuerto"].sum()
 
 # Distancia media ponderada por población
-dist_media_pond = (
-    (df["Población"] * df["distancia_helipuerto"]).sum()
-    / df["Población"].sum()
+dist_media_ponderada = (
+    (data["Población"] * data["distancia_helipuerto"]).sum()
+    / data["Población"].sum()
 )
 
-print("\nMÉTRICAS DEL MODELO P-CENTER")
+print("\n-MÉTRICAS DEL MODELO P-CENTER-\n")
 print(f"Distancia máxima al helipuerto: {dist_max:.2f}")
 print(f"Distancia media al helipuerto: {dist_media:.2f}")
 print(f"Distancia total (suma de distancias): {dist_total:.2f}")
-print(f"Distancia media ponderada por población: {dist_media_pond:.2f}")
+print(f"Distancia media ponderada por población: {dist_media_ponderada:.2f}")
 
